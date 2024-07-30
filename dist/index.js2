@@ -1,0 +1,97 @@
+#!/usr/bin/env node
+"use strict";
+
+const { Command } = require('commander');
+const { stake } = require("./src/stake");
+const { redeem } = require("./src/redeem");
+const { createRawTransaction } = require('./src/raw');
+const { BitcoinNetworkMap, CoreNetworkMap, FeeSpeedMap } = require("./src/constant");
+
+const program = new Command();
+program.version("1.0.0").description("Core chain self custody BTC staking command line tool.");
+
+// Function to collect values for inputs and outputs
+function collect(value, previous) {
+    return previous.concat([value]);
+}
+
+// Command to stake BTC
+program
+    .command("stake")
+    .description("Stake BTC")
+    .requiredOption("-acc, --account <account>", "The Bitcoin address used to stake.")
+    .requiredOption("-amt, --amount <amount>", "Amount of BTC to stake, measured in SAT.")
+    .requiredOption("-lt, --locktime <locktime>", "The unix timestamp in seconds to lock the BTC assets up to.")
+    .requiredOption("-raddr, --rewardaddress <rewardaddress>", "Core address used to claim staking rewards.")
+    .requiredOption("-vaddr, --validatoraddress <validatoraddress>", "Core validator address to stake to.")
+    .option("-bn, --bitcoinnetwork <bitcoinnetwork>", "The Bitcoin network to operate on, choose between 1~2. 1) Mainnet 2) Testnet", "1")
+    .option("-cn, --corenetwork <corenetwork>", "The Core network to transmit the stake transaction to, choose between 1~3. 1) Mainnet 2) Devnet 3) Testnet", "1")
+    .option("-w, --witness", "Use segwit or not.")
+    .action(async (args) => {
+        const bitcoinnetwork = BitcoinNetworkMap[args.bitcoinnetwork];
+        const corenetwork = CoreNetworkMap[args.corenetwork];
+        const fee = FeeSpeedMap[args.fee || 'a'];
+        await stake({
+            lockTime: args.locktime,
+            amount: args.amount,
+            validatorAddress: args.validatoraddress,
+            rewardAddress: args.rewardaddress,
+            account: args.account,
+            bitcoinNetwork: bitcoinnetwork,
+            coreNetwork: corenetwork,
+            witness: args.witness,
+        });
+    });
+
+// Command to redeem BTC
+program
+    .command("redeem")
+    .description("Redeem BTC")
+    .requiredOption("-acc, --account <account>", "The locked P2SH/P2WSH script address.")
+    .requiredOption("-r, --redeemscript <redeemscript>", "The redeem script which was returned in the stake action.")
+    .requiredOption("-d, --destaddress <destaddress>", "The Bitcoin address to receive the redeemed BTC assets.")
+    .action(async (args) => {
+        const fee = FeeSpeedMap[args.fee || 'a'];
+        await redeem({
+            account: args.account,
+            redeemScript: args.redeemscript,
+            destAddress: args.destaddress,
+        });
+    });
+
+// Command to create a raw transaction
+program
+    .command("create-raw")
+    .description("Create a raw Bitcoin transaction")
+    .requiredOption('-n, --network <networkType>', 'The network type (bitcoin or testnet)', 'testnet')
+    .requiredOption('-l, --locktime <locktime>', 'Transaction locktime', '0')
+    .requiredOption('-i, --input <input>', 'Transaction inputs in the format txId:vout:sequence:amount:scriptPubKey', collect, [])
+    .requiredOption('-o, --output <output>', 'Transaction outputs in the format address:amount:publicKeyHex', collect, [])
+    .action((options) => {
+        const inputs = options.input.map(i => {
+            const parts = i.split(':');
+            return {
+                txId: parts[0],
+                vout: parseInt(parts[1]),
+                sequence: parseInt(parts[2] || 0xffffffff),
+                amount: parseInt(parts[3]),
+                scriptPubKey: parts[4]
+            };
+        });
+        const outputs = options.output.map(o => {
+            const parts = o.split(':');
+            return {
+                address: parts[0],
+                amount: parseInt(parts[1]),
+                publicKey: parts[2]
+            };
+        });
+        createRawTransaction({
+            networkType: options.network,
+            inputs,
+            outputs,
+            lockTime: parseInt(options.locktime)
+        });
+    });
+
+program.parse(process.argv);

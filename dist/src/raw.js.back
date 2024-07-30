@@ -1,0 +1,47 @@
+const bitcoin = require('bitcoinjs-lib');
+
+/**
+ * Function to create a raw transaction
+ * @param {Object} params - The parameters for creating the transaction
+ * @param {string} params.networkType - The type of Bitcoin network (e.g., 'bitcoin', 'testnet')
+ * @param {Array} params.inputs - Inputs for the transaction
+ * @param {Array} params.outputs - Outputs for the transaction
+ * @param {number} params.lockTime - The locktime for the transaction
+ * @returns {string} The raw transaction in hexadecimal format
+ */
+function createRawTransaction({ networkType, inputs, outputs, lockTime }) {
+    const network = bitcoin.networks[networkType] || bitcoin.networks.testnet; // default to testnet if not specified
+    const psbt = new bitcoin.Psbt({ network });
+
+    // Add inputs
+    inputs.forEach(input => {
+        psbt.addInput({
+            hash: input.txId,
+            index: input.vout,
+            sequence: input.sequence,
+            witnessUtxo: {
+                script: Buffer.from(input.scriptPubKey, 'hex'),
+                value: input.amount
+            }
+        });
+    });
+
+    // Add outputs
+    outputs.forEach(output => {
+        psbt.addOutput({
+            address: output.address,
+            value: output.amount
+        });
+    });
+
+    psbt.setLocktime(lockTime);
+
+    // Finalize the transaction without signing it
+    const rawTransaction = psbt.toHex();
+    console.log("Raw Transaction:", rawTransaction);
+    return rawTransaction;
+}
+
+module.exports = {
+    createRawTransaction
+};

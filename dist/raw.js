@@ -1,18 +1,20 @@
 const bitcoin = require('bitcoinjs-lib');
-const BigNumber = require('bignumber.js');
 
-function createUnsignedTransaction({ networkType, lockTime, inputs, outputs }) {
+function createRawTransaction(networkType, inputs, outputs, lockTime) {
     const network = bitcoin.networks[networkType];
     const psbt = new bitcoin.Psbt({ network });
 
+    // Add inputs
     inputs.forEach(input => {
         psbt.addInput({
             hash: input.txId,
             index: input.vout,
-            sequence: input.sequence
+            sequence: input.sequence || 0xffffffff,
+            nonWitnessUtxo: Buffer.from(input.rawTransaction, 'hex')
         });
     });
 
+    // Add outputs
     outputs.forEach(output => {
         psbt.addOutput({
             address: output.address,
@@ -24,7 +26,9 @@ function createUnsignedTransaction({ networkType, lockTime, inputs, outputs }) {
         psbt.setLocktime(lockTime);
     }
 
-    return psbt.toHex();
+    const rawTransaction = psbt.extractTransaction().toHex();
+    console.log("Raw Transaction:", rawTransaction);
+    return rawTransaction;
 }
 
-exports.createUnsignedTransaction = createUnsignedTransaction;
+module.exports = { createRawTransaction };
